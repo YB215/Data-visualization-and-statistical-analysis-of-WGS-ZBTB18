@@ -14,5 +14,8 @@ SFARI (Autism gene database), and RVIS (Residual Variation Intolerance Score) al
 - Raw sequencing data is available at GEO******
 
 
-
 -The code available in this repository is written in R programming language
+
+
+Yared Bayleyen P.hD. candidate- Christopher Mason Laboratory
+Weill Cornell Medicine
