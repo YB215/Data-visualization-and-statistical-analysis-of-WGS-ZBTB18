@@ -1,0 +1,1961 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+
+```{r}
+
+#11/1/2021
+
+# Graphs for manuscript - figures
+
+# Load datasets that will be used in this notebook - RNAseq - Deseq2 output
+#                                                    MeRIP  - DEQ output
+
+RP58_deseq_output <- read.csv("C:/Users/yared/Desktop/Mason_lab_xps/rp58_rnaseq_featurecounts/output_deseq2/20201112_DGE_RP58_E14_Ctx.csv")
+
+#View(as.data.frame(RP58_deseq_output))
+
+
+```
+
+```{r}
+
+# Volcano plot of differentially expressed genes in RNAseq dataset
+
+library(ggplot2)
+library(tidyverse)
+library(ggrepel)
+library(dplyr)
+library(magrittr)
+library(EnhancedVolcano)
+
+#Volcano plot 
+
+volcanoplot_DGE_RNAseq_RP58 <- ggplot(RP58_deseq_output) +
+  geom_point(aes(x=log2FoldChange, y=-log10(padj), colour=log2FoldChange > 0), size = 1) +
+  labs(caption = "Total genes=916") +
+  ggtitle("Differentially expressed genes") +
+  scale_colour_manual(name = 'log2 fold-change > 0', values = setNames(c('blue','grey'),c(T,F))) +
+  xlab("diff.log2 fold-change") +
+  ylab("-log10 adjusted p-value") +
+  xlim(-6,6) +
+  ylim(0,25) +
+  theme(legend.position = "none",
+        plot.title = element_text(size = rel(1), hjust = 0.5)) +
+  geom_text_repel(aes(x=log2FoldChange, y=-log10(pvalue), label = gene_symbol, size = 3.88)) +
+  geom_label_repel(max.overlaps = 0, label.size = NA) +
+  aes(x=log2FoldChange, y=-log10(pvalue), label = gene_symbol) +
+  theme_bw() 
+
+volcanoplot_DGE_RNAseq_RP58
+
+ggsave("C:/Users/yared/Desktop/Mason_lab_xps/RP58_manuscript/Figures/RNAseq/11012021_volcanoplot_DGE_RNAseq_RP58.png")
+
+
+##### revised volcano plot containing all genes with padj (not just sig ones like the # previous graph)
+
+DGE_deseq_results_allgenes <- read.csv(file = "C:/Users/yared/Desktop/Mason_lab_xps/RP58_manuscript/Dataframes/RNAseq/121921_DGE_deseq_results_allgenes.csv", row.names = 1)
+
+# padj in ascending order, remove NAs rows, then convert gene_symbols and plot 
+
+DGE_deseq_results_allgenes <- DGE_deseq_results_allgenes %>% arrange(desc(padj))
+
+DGE_deseq_results_allgenes_padj <- DGE_deseq_results_allgenes %>% drop_na(padj)
+DGE_deseq_results_allgenes_padj$X <- rownames(DGE_deseq_results_allgenes_padj)
+
+write.table(DGE_deseq_results_allgenes_padj, "C:/Users/yared/Desktop/Mason_lab_xps/RP58_manuscript/Dataframes/RNAseq/121921_DGE_deseq_results_allgenes_onlypadj.csv", sep =",", row.names = FALSE)
+
+DGE_deseq_results_all_padj_genenames <- read.csv("C:/Users/yared/Desktop/Mason_lab_xps/RP58_manuscript/Dataframes/RNAseq/121921_DGE_deseq_results_allgenes_onlypadj.csv")
+
+## ggplot it - volcano ## make the significant ones different color, padj < 0.05
+
+volcanoplot_allgenes_RNAseq_RP58 <- ggplot(DGE_deseq_results_all_padj_genenames) +
+  geom_point(aes(x=log2FoldChange, y=-log10(padj), colour=log2FoldChange > 0), size = 0.3) +
+  labs(caption = "Total genes=916") +
+  ggtitle("Differentially expressed genes") +
+  scale_colour_manual(name = 'log2 fold-change > 0', values = setNames(c('blue','grey'),c(T,F))) +
+  xlab("diff.log2 fold-change") +
+  ylab("-log10 adjusted p-value") +
+  xlim(-3,3) +
+  ylim(0,5) +
+  theme(legend.position = "none",
+        plot.title = element_text(size = rel(1), hjust = 0.5)) +
+  geom_text_repel(data= subset(DGE_deseq_results_all_padj_genenames, -log10(padj) > 0.05), aes(x=log2FoldChange, y=-log10(pvalue), label = gene_symbol)) +
+  geom_hline(yintercept=2, linetype='dashed', color = 'black') +
+  geom_vline(xintercept=c(-2,2), linetype='dashed', color = 'black') +
+  theme_bw()
+
+
+volcanoplot_allgenes_RNAseq_RP58
+
+ggsave("C:/Users/yared/Desktop/Mason_lab_xps/RP58_manuscript/Figures/RNAseq/121921_volcanoplot_allgenes_RNAseq_RP58.png")
+
+
+###################################################################### revised #
+
+
+```
+
+
+
+```{r}
+
+#Volcano plot using EnhancedVolcano package
+
+#from 2020_rnaseq_deseq2_v01
+
+dds <- DESeq(dds, betaPrior = FALSE)
+res <- results(dds,
+                contrast = c("Condition", "ko", "wt"))
+  
+
+# gene names
+gene_id <- rownames(rnaseq_rp58_countdata)
+
+
+res <- lfcShrink(dds, contrast = c("Condition", "ko", "wt"), res=res, type = 'normal')
+
+rownames(res)<- gene_id
+
+EnhancedVolcano(res,
+                lab = rownames(res),
+                x = 'log2FoldChange',
+                y = 'pvalue')
+
+
+
+```
+```{r}
+
+#convert gene names 
+
+# Future assignment, use web-scraping of a paper to find all genes relevant to 
+# microcephaly \ ID\autism database -> store as a separate df. 
+
+library(Biobase)
+library("AnnotationDbi")
+library("org.Hs.eg.db")
+library(biomaRt)
+
+gene_id <- rownames(rnaseq_rp58_countdata)
+
+mart_datasets <- listDatasets(mart, verbose = FALSE)
+search_data <- searchDatasets(mart, pattern ="mus" )
+
+mart <- biomaRt::useMart(biomart = 'ensembl', dataset = "mmusculus_gene_ensembl")
+refseq_ids <- c("NM_000594", "NM_001101")
+
+refseq_mapping <- biomaRt::getBM(attributes = c("refseq_mrna" , "hgnc_symbol"),
+                                 filters = "refseq_mrna",
+                                 values=refseq_ids,
+                                 mart=mart)
+
+refseq_mapping
+
+
+ensembl <- useMart("ensembl", dataset = "mmusculus_gene_ensembl")
+
+values_human <- c("NM_001101", "NM_001256799", "NM_000594")
+NM_007930, NM_144799
+values_mus <- c("NM_144799", "NM_007930")
+
+getBM(attributes = c("refseq_mrna", "ensembl_gene_id", "hgnc_symbol"), filters = "refseq_mrna", values = values_mus, mart = ensembl)
+
+
+
+
+```
+
+
+```{r}
+
+# Find genes of interest in a paper\html\pdf\txt using regex - use gene lists in both 
+# RNAseq and MeRIPseq datasets
+
+# citations: Elucidation of the phenotypic spectrum and genetic landscape in primary and secondary microcephaly
+
+GOI_microcephaly <- c("Sox11", "^Id", "Zic2", "Lmnb1", "Nr2e1", "Lingo1", "Cenpj", "Stil", "Cep152", "Cep63", "CDK5RAP2", "PLK4", "ASPM", "DHTKD1", "ERCC6", "TRAPPC9", "TRMT10A", "KAT6A", "HDAC8", "MT-ATP6", "SLC9A6", "DYRK1A", "FBXO11", "KMT2A", "NACC1", "POGZ", "PTPN11", "TLK2", "KARS", "STXBP1", "TRIO", "MECP2", "PQBP1", "SPAG5", "TEDC1", "DDX1", "VPS26A", "ZNRF3")
+
+
+GOI_micro <- as.data.frame(GOI_microcephaly)
+colnames(GOI_micro) <- "microcephaly"
+GOI_micro <- str_to_title(GOI_micro)
+
+GOI_microcephaly_related_Subset <- RP58_deseq_output[grep(paste(GOI_microcephaly, collapse="|"), RP58_deseq_output$gene_symbol), ]
+
+### Autism related genes from SPARK db
+
+autism_sfari_df <- read.csv("C:/Users/yared/Desktop/Mason_lab_xps/RP58_manuscript/Databases/SFARI-Gene_genes_09-02-2021release_11-03-2021export.csv", header = TRUE)
+
+colnames(autism_sfari_df)[1] <- "autism_gene"
+
+autism_sfari_df <- autism_sfari_df[1:49,]
+
+
+autism_relatedgenes <- autism_sfari_df$gene.symbol
+
+GOI_autism_related_Subset <- RP58_deseq_output[grep(paste(autism_relatedgenes, collapse="|"), ignore.case = TRUE, RP58_deseq_output$gene_symbol), ]
+
+GOI_autism_related_Subset <- as.data.frame(GOI_autism_related_Subset)
+
+autism_ggplot <- ggplot(GOI_autism_related_Subset, aes(x = "log2FoldChange")) + geom_histogram() 
+  
+ggplot(GOI_autism_related_Subset, aes(x=log2FoldChange)) +
+  geom_histogram()
+
+#+ geom_text(label = GOI_autism_related_Subset$gene_symbol) 
+
+rownames(GOI_autism_related_Subset) <- GOI_autism_related_Subset$gene_symbol
+
+# Create more subsets...brain development\etc. get some informative ideas from EnrichR
+
+```
+
+
+
+```{r}
+
+# Accessing individual plot counts for specific genes. (Figure out how to retrieve their data)
+
+plotCounts(dds, gene=which.min(res$padj), intgroup="condition")
+
+# PCA for samples
+
+vsd <- vst(dds, blind = FALSE)
+
+plotPCA(vsd, intgroup = c("sizeFactor", "Condition"))
+
+pcaData <- plotPCA(vsd, intgroup = c("sizeFactor", "Condition"), returnData= TRUE)
+pcaData
+
+percentVar <- round(100 * attr(pcaData, "percentVar"))
+
+#######
+
+r = rlog(dds)
+d = plotPCA(r, returnData=TRUE)
+library(ggplot2)
+ggplot(pcaData, aes(x=PC1,y=PC2,col=Condition, label=sizeFactor )) + geom_point() + theme_bw()
+
+a <- ggsave(pca_samples, device = pca_samples)
+
+# using ggplot
+
+ggplot(pcaData, aes(x = pcaData$PC1 , y = pcaData$PC2, color = name, shape = Condition)) + 
+  geom_point(x = pcaData$PC1 , size = 3) +
+  xlab(paste0("PC1: ", percentVar[1], "% variance")) +
+  ylab(paste0("PC2: ", percentVar[2], "% variance")) +
+  coord_fixed() +
+  ggtitle("PCA w VST data")
+
+
+# Analysis of single gene counts
+
+topgene <- rownames(res)[which.min(res$padj)]
+
+plotCounts(vst, gene = "ENSG00000002549.12_3", intgroup= c("group", "Condition"))
+
+
+```
+
+```{r}
+
+# Create heatmap exercise
+# https://cran.r-project.org/web/packages/dendextend/vignettes/Cluster_Analysis.html
+
+iris <- datasets::iris
+iris2 <- iris[,-5]
+
+species_labels <- iris[,5]
+library(colorspace) # better colors
+
+species_col <- rev(rainbow_hcl(3))[as.numeric(species_labels)]
+
+d_iris <- dist(iris2)
+hc_iris <- hclust(d_iris, method = "complete")
+iris_species <- rev(levels(iris[,5]))
+
+
+```
+
+```{r}
+
+# https://www.datanovia.com/en/blog/beautiful-ggplot-venn-diagram-with-r/
+
+library("ggVennDiagram")
+
+set.seed(20190708)
+
+genes <- paste("gene", 1:1000, sep ="")
+x <- list(
+  A = sample(genes, 300),
+  B = sample(genes, 525),
+  C = sample(genes, 440),
+  D = sample(genes, 350)
+)
+
+ggVennDiagram(x)
+
+### 
+GOI_autism_list <- as.list(GOI_autism_related_Subset)
+
+GOI_RP58_rnaseq <- as.list(RP58_deseq_output)
+
+venn_autism_rp58 <- cbind(RP58_deseq_output$gene_symbol, GOI_autism_related_Subset$gene_symbol)
+
+## convert column to uppercase
+RP58_deseq_output_upper <- as.data.frame(toupper(RP58_deseq_output$gene_symbol))
+
+GOI_venn_autism_RP58 <- qpcR:::cbind.na(RP58_deseq_output_upper$`toupper(RP58_deseq_output$gene_symbol)` ,autism_sfari_df$gene.symbol)
+
+df_GOI <- as.data.frame(GOI_venn_autism_RP58)
+
+GOI_venn_autism_RP58_list <- as.list(df_GOI)
+names(GOI_venn_autism_RP58_list) <- c("RP58_Transcriptome","Autism_SPARK_Database")
+
+GOI_venn_autism_RP58_complete <- ggVennDiagram(GOI_venn_autism_RP58_list[1:2], label_alpha = 0) + ggplot2::scale_fill_gradient(low="#4981BF",high = "white") 
+GOI_venn_autism_RP58_complete
+
+GOI_venn_autism_RP58_complete <- ggVennDiagram(GOI_venn_autism_RP58_list[1:2], color = "black", lwd = 0.8 , lty = 1 ,label_alpha = 0) + ggplot2::scale_fill_gradient(low="purple",high = "white") 
+GOI_venn_autism_RP58_complete
+
+
+ggsave("C:/Users/yared/Desktop/Mason_lab_xps/RP58_manuscript/Figures/RNAseq/031522_GOI_venn_autism_RP58_rnaseq.png")
+
+
+```
+
+```{r}
+
+# Find common strings (genes) between two columns. Example Ex.
+
+library(stringr)
+library(dplyr)
+
+GL <- c("A1", "A2", "A3", "A4")
+TS <- c("A1", "A2", "A3", "A4", "A5", "A6")
+
+intersect(str_trim(GL), str_trim(TS))
+
+############
+
+# autism genes present in significant RNAseq dataset 
+GOI_intersect <- intersect(str_trim(df_GOI$V1), str_trim(df_GOI$V2))
+
+# RP58_deseq_output - extract rows with genes present in GOI_intersect
+
+rp58_deseq_1 <- RP58_deseq_output
+
+abc <- dplyr::filter(rp58_deseq_1, grepl(paste(GOI_intersect, collapse ="|", gene_symbol)))
+
+###
+
+rp58_autism_intersect <- rp58_deseq_1[grep(paste(GOI_intersect, collapse="|"), rp58_deseq_1$gene_symbol), ]
+
+write.csv(rp58_autism_intersect, 'C:/Users/yared/Desktop/Mason_lab_xps/RP58_manuscript/Dataframes/rp58_autism_intersect.csv')
+
+### Developmental genes from literature (also make one specifically for brain size?)
+
+# Single-cell atlas of early human brain development highlights heterogeneity of human neuroepithelial cells and early radial glia
+
+development_relatedgenes <- c("^Wnt", "^Sox", "^Fgf", "^Id", "^Sox", "Nes", "Vim", "^Neuro", "^Cdc", "^Cdk")
+
+# vim, sox2, fgf10, nes, neurog2, notch, wnt
+
+rp58_rnaseq_dev_intersect <- rp58_deseq_1[grep(paste(development_relatedgenes, collapse="|"), rp58_deseq_1$gene_symbol), ]
+
+rp58_rnaseq_dev_intersect <- rp58_rnaseq_dev_intersect[order(rp58_rnaseq_dev_intersect$gene_symbol),]
+
+write.csv(rp58_rnaseq_dev_intersect, 'C:/Users/yared/Desktop/Mason_lab_xps/RP58_manuscript/Dataframes/rp58_rnaseq_dev_intersect.csv')
+####################
+
+rp58_rnaseq_dev_intersect_colors <- rp58_rnaseq_dev_intersect %>% mutate(group = 
+                                                case_when(
+                                                  str_detect(gene_symbol,"^Cdc") ~ "Cdc",
+                                                  str_detect(gene_symbol, "^Cdk") ~ "Cdk",
+                                                  str_detect(gene_symbol, "^Fgf") ~ "Fgf",
+                                                  str_detect(gene_symbol, "^Id") ~ "Id",
+                                                  str_detect(gene_symbol, "^Nes") ~ "Nes",
+                                                  str_detect(gene_symbol, "^Neuro") ~ "Neuro",
+                                                  str_detect(gene_symbol, "^Sox") ~ "Sox",
+                                                  str_detect(gene_symbol, "^Vim") ~ "Vim",
+                                                  str_detect(gene_symbol, "^Wnt") ~ "Wnt"))
+
+###### Bar plot of developmental genes in rp58 dataset 
+
+
+ggplot(rp58_rnaseq_dev_intersect_colors, aes(x = gene_symbol ,y = log2FoldChange)) +
+  geom_bar(aes(fill = factor(group)), stat="identity") +
+  coord_flip() +
+  theme_bw() +
+  theme(panel.border = element_blank(), legend.title = element_blank())
+
+
+ggsave("C:/Users/yared/Desktop/Mason_lab_xps/RP58_manuscript/Figures/RNAseq/rp58_rnaseq_dev_intersect_colors.png")
+
+
+# Also, look at transcription factors (and their networks\protein and gene interactors perhaps in databases). 
+
+# Use same gene set from developmental genes to inquire on m6A methylation
+# dataset object: merip_sig_peaks_diffl2fc
+
+rp58_merip_dev_intersect <- merip_sig_peaks_diffl2fc[grep(paste(development_relatedgenes, collapse="|"), merip_sig_peaks_diffl2fc$main.gene), ]
+
+rp58_merip_dev_intersect <- rp58_merip_dev_intersect[order(rp58_merip_dev_intersect$main.gene),]
+
+write.csv(rp58_merip_dev_intersect, 'C:/Users/yared/Desktop/Mason_lab_xps/RP58_manuscript/Dataframes/rp58_merip_dev_intersect.csv')
+
+
+
+###
+```
+
+```{r}
+
+# heatmap
+
+zdf <- read.csv("C:/Users/yared/Desktop/Mason_lab_xps/RP58_manuscript/Dataframes/RNAseq/zdf.csv")
+
+rownames(zdf) <- zdf$X
+zdfa <- subset(zdf, select=-c(X))
+
+zdfa_order <- zdfa %>% select(wt_1, wt_2, wt_7, wt_8, wt_9, ko_5, ko_6, ko_13, ko_14, ko_15)
+
+library(superheat)
+
+superheat(zdfa_order,
+          scale = TRUE,
+          left.label.text.size = 0.5,
+          bottom.label.text.size = 3,
+          bottom.label.size = .05,
+          row.dendrogram = TRUE)
+
+
+
+```
+
+```{r}
+
+# create heatmaps for only DGE for autism and microcephaly (a small one)
+# heatmap - only of autism genes 
+
+zdf <- read.csv("C:/Users/yared/Desktop/Mason_lab_xps/RP58_manuscript/Dataframes/RNAseq/zdf.csv")
+
+zdf$X.1 <- toupper(zdf$X.1)
+
+zdf_counts_rp58_autism_intersect <- zdf[grep(paste(GOI_intersect, collapse="|"), zdf$X.1), ]
+zdfb <- zdf_counts_rp58_autism_intersect 
+
+zdfb <- as.data.frame(zdfb)
+rownames(zdfb) <- make.names(zdfb$X.1,unique = TRUE)
+
+zdfb <- subset(zdfb, select=-c(X))
+zdfb <- subset(zdfb, select=-c(X.1))
+
+
+zdfb_order <- zdfb %>% select(wt_1, wt_2, wt_7, wt_8, wt_9, ko_5, ko_6, ko_13, ko_14, ko_15)
+
+
+
+## Heatmap of autism genes
+
+g1 <- superheat(zdfb_order,
+          left.label.text.size = 2,
+          left.label.text.alignment = "right",
+          left.label.col = "white",
+          bottom.label.text.size = 3,
+          bottom.label.size = .05,
+          row.dendrogram = TRUE,
+          heat.col.scheme = "purple",
+          scale = TRUE)
+
+ggplot2::ggsave(file = "autism_heatmap_g1.png", plot = g1[[2]], width = 12, height = 10)
+
+######## without names ##########
+
+g5 <- superheat(zdfb_order,
+          left.label = "none",
+          bottom.label.size = 0.05,
+          bottom.label.text.size = 5,
+          heat.col.scheme = "purple",
+          row.dendrogram = TRUE,
+          scale = TRUE)
+
+
+ggplot2::ggsave(file = "autism_heatmap_g5_nonames.png", plot = g5[[2]], width = 12, height = 10)
+
+```
+
+```{r}
+
+#### extract autism genes showing highest differential expression between the groups 
+#### by row counts in overall heatmap
+
+GOI_intersect_g2 <- c("LRF2.1", "SYPL2.1", "HMGN1", "FOXG1", "SYPL2", "LRRC1", "CNTNAP2", "DNMT3A", "SOC2","MAOA", "MEGF10", "MCM4", "KCND3", "SLC6A1", "SLC6A11", "CSDC2", "PDE1C", "LRFN2")
+
+zdf_counts_rp58_autism_intersect_g2 <- zdfb_order[grep(paste(GOI_intersect_g2, collapse="|"), rownames(zdfb_order)), ]
+
+
+g2 <- superheat(zdf_counts_rp58_autism_intersect_g2,
+          left.label.text.size = 3.5,
+          left.label.text.alignment = "right",
+          left.label.col = "white",
+          bottom.label.text.size = 3,
+          bottom.label.size = .05,
+          row.dendrogram = TRUE,
+          heat.col.scheme = "red")
+
+ggplot2::ggsave(file = "autism_heatmap_g2.png", plot = g2[[2]], width = 12, height = 10)
+
+
+
+```
+
+
+
+
+
+```{r}
+
+### m6A (machinery) related genes with sig merip peaks
+
+m6A_relatedgenes <- c("Wtap", "^Yth", "Igfbp3", "Virma", "^Rbm15", "Hnrnp", "Zc3h13", "Cbll1", "Alkbh5")
+
+rnaseq_m6agenes_intersect <- rp58_deseq_1[grep(paste(m6A_relatedgenes, collapse="|"), rp58_deseq_1$gene_symbol), ]
+
+write.csv(merip_m6agenes_peaks_intersect, 'C:/Users/yared/Desktop/Mason_lab_xps/RP58_manuscript/Dataframes/merip_m6agenes_peaks_intersect.csv')
+
+
+
+
+```
+
+
+
+```{r}
+
+# Histone genes heatmap from RNAseq dataset
+
+# https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3782347/
+
+library(dplyr)
+library(stringr)
+
+RP58_deseq_output <- read.csv("C:/Users/yared/Desktop/Mason_lab_xps/rp58_rnaseq_featurecounts/output_deseq2/20201112_DGE_RP58_E14_Ctx.csv")
+
+RP58_deseq_hist <- dplyr::filter(RP58_deseq_output, grepl("Hist", gene_symbol))
+
+# bar plot for Hist1 genes
+
+hist_plot <- ggplot(RP58_deseq_hist,
+       aes(x = RP58_deseq_hist$gene_symbol, y = RP58_deseq_hist$log2FoldChange)) +
+  geom_bar(stat = "identity", fill = "blue") +
+  xlab("Gene symbol") +
+  ylab("Log-2 fold change") +
+  theme_bw() +
+  theme(panel.border = element_blank()) +
+  theme(axis.line = element_line(colour = "black")) +
+  theme(axis.text.x = element_text(angle = 90))
+  
+hist_plot 
+
+ggsave("C:/Users/yared/Desktop/Mason_lab_xps/RP58_manuscript/Figures/RNAseq/111821_hist1_rnaseq.png")
+
+```
+
+```{r}
+
+hist_plot_colors <- ggplot(RP58_deseq_hist,
+       aes(x = RP58_deseq_hist$gene_symbol, y = RP58_deseq_hist$log2FoldChange)) +
+  geom_bar(stat = "identity", fill = factor(ifelse(RP58_deseq_hist$gene_symbol==c("Hist2h4"), "red", "blue"))) +
+  xlab("Gene symbol") +
+  ylab("Log-2 fold change") +
+  theme_bw() +
+  theme(panel.border = element_blank()) +
+  theme(axis.line = element_line(colour = "black")) +
+  theme(axis.text.x = element_text(angle = 90))
+
+hist_plot_colors
+
+#### Exercise and color a subset of hist1 and hist2
+
+
+#This function will create a new column containing a,b,c based on the strings found in gene_symbol column
+
+hist1_2_colors <- RP58_deseq_hist %>% mutate(group = 
+                                                case_when(
+                                                  str_detect(gene_symbol,"^Hist1") ~ "Hist1",
+                                                  str_detect(gene_symbol, "^Hist2") ~ "Hist2",
+                                                  str_detect(gene_symbol, "^Hist4") ~ "Hist4"))
+
+########## Plot and color by factor
+
+hist_plot_colors <- ggplot(hist1_2_colors,
+       aes(x = hist1_2_colors$gene_symbol, y = hist1_2_colors$log2FoldChange)) +
+  geom_bar(aes(fill = factor(group)), stat = "identity") +
+  xlab("Gene symbol") +
+  ylab("Log2fc")+
+  theme_bw() +
+  theme(panel.border = element_blank(), legend.title = element_blank()) +
+  theme(axis.line = element_line(colour = "black")) +
+  theme(axis.text.x = element_text(angle = 90)) +
+  coord_flip()
+
+hist_plot_colors + scale_fill_manual(values = c("blue", "green", "yellow"))
+
+ggsave("C:/Users/yared/Desktop/Mason_lab_xps/RP58_manuscript/Figures/RNAseq/112221_hist1_rnaseq.png")
+
+
+```
+
+
+```{r}
+
+# https://www.researchgate.net/post/How_do_we_calculate_a_cumulative_distribution_function_CDF_plot_for_microRNA_target_seed_enrichment
+
+plot(ecdf(RP58_deseq_hist$log2FoldChange))
+plot(ecdf(rp58_autism_intersect$log2FoldChange))
+
+
+list2 <- rep("1", length(RP58_deseq_hist$log2FoldChange))
+list3 <- rep("2", length(rp58_autism_intersect$log2FoldChange))
+
+list2_bind <- cbind(RP58_deseq_hist$log2FoldChange, rep("Histone 1 genes", length(RP58_deseq_hist$log2FoldChange)))
+
+list3_bind <- cbind(RP58_deseq_output$log2FoldChange, rep("all_genes", length(RP58_deseq_output$log2FoldChange)))
+
+stack_ecdf_multiple <- rbind(list2_bind, list3_bind)
+
+ecdf_multiple_dfs <- as.data.frame(stack_ecdf_multiple)
+
+ecdf_multiple_dfs$V1 <- as.numeric(ecdf_multiple_dfs$V1)
+ecdf_multiple_dfs$V2 <- as.factor(ecdf_multiple_dfs$V2)
+
+stack_ecdf_df <- ecdf_multiple_dfs
+colnames(stack_ecdf_df) <- c("log2fc", "group")
+
+
+df %>%
+ggplot(aes(x=x, col=group)) + stat_ecdf()
+
+
+### Create CDF for histone 1 genes vs. all genes. 
+
+stack_ecdf_df_hist_plot <- stack_ecdf_df %>%
+ggplot(aes(x=log2fc, col=group)) + 
+  theme_bw() +
+  theme(panel.border = element_blank(), legend.title = element_blank()) +
+  theme(axis.line = element_line(colour = "black")) +
+  stat_ecdf() +
+  ylab("CDF") +
+  xlim(-4,4)
+
+stack_ecdf_df_hist_plot
+
+ggsave("C:/Users/yared/Desktop/Mason_lab_xps/RP58_manuscript/Figures/RNAseq/121721_ecdf_hist1_rnaseq.png")
+
+
+### Create similar graphs for Kcn related genes, as well as Sox genes. 
+
+# Use Enricher for generating downstream gene analysis pathways.
+# https://cran.r-project.org/web/packages/enrichR/vignettes/enrichR.html
+
+# and intersect with known databases (DBDD)
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+
+### MeRIPseq dataset ###
+
+library(tidyr)
+library(stringr)
+
+merip_data <- read.csv("C:/Users/yared/Desktop/Mason_lab_xps/RP58_manuscript/Dataframes/MeRIPseq/output_files_deq/DEQ_HM_peakcalls_RP58KO_vs_WT_2021.csv")
+
+merip_sig_peaks_diffl2fc <- merip_data %>% drop_na(diff.l2fc)
+
+# remove utr3*, utr5*
+
+merip_sig_peaks_diffl2fc_cln <- merip_sig_peaks_diffl2fc
+
+cln <- merip_sig_peaks_diffl2fc_cln[- grep("\\*$", merip_sig_peaks_diffl2fc_cln$annot),]
+merip_sig_peaks_diffl2fc <- cln
+
+View(merip_sig_peaks_diffl2fc)
+
+write.csv(merip_sig_peaks_diffl2fc, 'C:/Users/yared/Desktop/Mason_lab_xps/RP58_manuscript/Dataframes/merip_sig_peaks_diffl2fc.csv')
+
+
+# 
+### Autism genes with sig merip peaks
+
+merip_autism_peaks_intersect <- merip_sig_peaks_diffl2fc[grep(paste(rp58_autism_intersect$gene_symbol, collapse="|"), merip_sig_peaks_diffl2fc$main.gene), ]
+
+write.csv(merip_autism_peaks_intersect, 'C:/Users/yared/Desktop/Mason_lab_xps/RP58_manuscript/Dataframes/merip_autism_peaks_intersect.csv')
+
+merip_autism_peaks_intersect <- read.csv("C:/Users/yared/Desktop/Mason_lab_xps/RP58_manuscript/Dataframes/merip_autism_peaks_intersect.csv") 
+
+### Microcephaly genes with sig merip peaks
+
+GOI_microcephaly_nomen <- str_to_title(GOI_microcephaly)
+
+merip_microcephaly_peaks_intersect <- merip_sig_peaks_diffl2fc[grep(paste(GOI_microcephaly_nomen, collapse="|"), merip_sig_peaks_diffl2fc$main.gene), ]
+
+write.csv(merip_microcephaly_peaks_intersect, 'C:/Users/yared/Desktop/Mason_lab_xps/RP58_manuscript/Dataframes/merip_microcephaly_peaks_intersect.csv')
+
+
+### m6A (machinery) related genes with sig merip peaks
+
+m6A_relatedgenes <- c("Wtap", "^Yth", "Igfbp3", "Virma", "^Rbm15", "Hnrnp", "Zc3h13", "Cbll1", "Alkbh5")
+
+merip_m6agenes_peaks_intersect <- merip_sig_peaks_diffl2fc[grep(paste(m6A_relatedgenes, collapse="|"), merip_sig_peaks_diffl2fc$main.gene), ]
+
+write.csv(merip_m6agenes_peaks_intersect, 'C:/Users/yared/Desktop/Mason_lab_xps/RP58_manuscript/Dataframes/merip_m6agenes_peaks_intersect.csv')
+
+
+#### Plot by genomic features. 
+
+
+# m6A (machinery) related genes
+
+GOI_m6A_related_Subset_plot_test_legend <- ggplot(merip_m6agenes_peaks_intersect,
+       aes(y = main.gene,
+           x = diff.l2fc,
+           group = annot,
+           color = factor(annot),
+           shape = factor(annot))) +
+  geom_point(aes(colour = factor(annot)), alpha = 0.7,
+              size = 2.0) +
+  labs(title = "m6A related genes",
+       subtitle = "Significant MeRIP peaks",
+       x = "diff.l2fc",
+       y = "") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(size = 6, angle = 90), legend.title = element_blank())
+
+GOI_m6A_related_Subset_plot_test_legend
+
+ggsave("C:/Users/yared/Desktop/Mason_lab_xps/RP58_manuscript/Dataframes/merip_GOI_m6A_related_genomicfeat.png")
+
+
+######
+
+# autism related genes (remove utr3* and 5utr*) too many peaks to represent in this format. 
+
+GOI_autism_related_Subset_plot_test_legend <- ggplot(merip_autism_peaks_intersect,
+       aes(y = main.gene,
+           x = diff.l2fc,
+           group = annot,
+           color = factor(annot),
+           shape = factor(annot))) +
+  geom_point(aes(colour = factor(annot)), alpha = 0.7,
+              size = 2.0) +
+  labs(title = "Autism related genes",
+       subtitle = "Significant MeRIP peaks",
+       x = "diff.l2fc",
+       y = "") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(size = 6, angle = 90), legend.title = element_blank())
+
+GOI_autism_related_Subset_plot_test_legend
+
+ggsave("C:/Users/yared/Desktop/Mason_lab_xps/RP58_manuscript/Figures/MeRIPseq/merip_GOI_autism_related_genomicfeat.png")
+
+# make a graph of all genes upregulated vs. their m6a diff.l2fc and for downregulated as well.
+
+# so you can see the correlation between gene expression and methylation 
+
+# the m6A genes with methylation are less interesting (although useful),
+# show some of the developmental genes in the colored chart and their methylation patterns
+# find novel genes in rnaseq not in literature
+# also show most upregulated and downregulated genes in each genomic features
+# so for example: Exons (most up and down genes), Utr3 (most up and down genes) etc etc etc 
+# look specifically at the 5'UTR genes
+
+# Enrichr 
+
+
+#### m6A related development genes ### heterogenity ####
+
+GOI_dev_related_merip_Subset_plot_test_legend <- ggplot(rp58_merip_dev_intersect,
+       aes(y = main.gene,
+           x = diff.l2fc,
+           group = annot,
+           color = factor(annot),
+           shape = factor(annot))) +
+  geom_point(aes(colour = factor(annot)), alpha = 0.7,
+              size = 2.0) +
+  labs(title = "dev_m6a related genes",
+       subtitle = "Significant MeRIP peaks",
+       x = "diff.l2fc",
+       y = "") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(size = 6, angle = 90), legend.title = element_blank())
+
+GOI_dev_related_merip_Subset_plot_test_legend
+
+ggsave("C:/Users/yared/Desktop/Mason_lab_xps/RP58_manuscript/Dataframes/merip_GOI_dev_related_genomicfeat.png")
+
+#### only score 1 
+
+autism_rp58_score_1_only_df_na$gene_symbol <- str_to_title(autism_rp58_score_1_only_df_na$gene_symbol)
+
+merip_autism_rp58_intersect_score_1only <- merip_sig_peaks_diffl2fc[grep(paste(autism_rp58_score_1_only_df_na$gene_symbol, collapse="|"), merip_sig_peaks_diffl2fc$main.gene), ]
+
+View(merip_autism_rp58_intersect_score_1only)
+
+GOI_autism_score1_merip_genefeat <- ggplot(merip_autism_rp58_intersect_score_1only,
+       aes(y = main.gene,
+           x = diff.l2fc,
+           group = annot,
+           color = factor(annot),
+           shape = factor(annot))) +
+  geom_point(aes(colour = factor(annot)), alpha = 0.7,
+              size = 2.0) +
+  labs(title = "Spark database - Autism related genes - Score 1",
+       subtitle = "Significant MeRIP peaks",
+       x = "diff.l2fc",
+       y = "") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(size = 6, angle = 90), legend.title = element_blank())
+
+GOI_autism_score1_merip_genefeat
+
+ggsave("C:/Users/yared/Desktop/Mason_lab_xps/RP58_manuscript/Figures/MeRIPseq/GOI_autism_score1_merip_genomicfeat.png")
+
+
+```
+
+
+```{r}
+
+# Violin plots of significant peaks across genomic features
+
+# df = merip_sig_peaks_diffl2fc
+
+library(ggsignif)
+
+merip_sig_peaks_dist_genomicfeat <- ggplot(merip_sig_peaks_diffl2fc,
+       aes(x = annot,
+           y = diff.l2fc,
+           color = factor(annot))) +
+         geom_violin(aes(fill = factor(annot))) +
+  geom_boxplot(width = .2)+
+  theme_minimal() +
+  theme(legend.title = element_blank()) +
+  ylim(-6,6) +
+  labs(title = "Significant MeRIP (m6A) peaks",
+       subtitle = "Distribution across genomic features",
+       x = "",
+       y = "log2FoldChange") 
+
+merip_sig_peaks_dist_genomicfeat + 
+  annotate("text", y = 5.5, x = 4, label = "***")
+
+ggsave("C:/Users/yared/Desktop/Mason_lab_xps/RP58_manuscript/Figures/MeRIPseq/merip_sig_peaks_dist_genomicfeat_sigastrix.png")
+
+# Conclusion = 5' UTR significant peaks are upregulated ! 
+```
+
+```{r}
+
+# Venn diagram of MeRIP (total and significant) peaks
+# histogram (geom bar)
+
+library(dplyr)
+library(ggplot2)
+library(scales)
+
+merip_peaks_counts <- merip_sig_peaks_diffl2fc %>% count(annot)
+colnames(merip_peaks_counts) <- c("gene_feature", "peaks")
+
+merip_peaks_counts_hist <- ggplot(merip_peaks_counts,
+       aes(x = gene_feature,
+           y = peaks,
+           fill = factor(gene_feature))) +
+  geom_bar(stat = "identity", width = 0.5 ) +
+  theme_minimal() +
+  theme(legend.title = element_blank()) +
+  labs(title = "Number of Significant MeRIP (m6A) peaks") +
+  ylim (0,2500)
+
+ggsave("C:/Users/yared/Desktop/Mason_lab_xps/RP58_manuscript/Figures/MeRIPseq/merip_peaks_counts_hist.png")
+
+## Note: add potassium channel genes to ecdf plot. 
+
+merip_peaks_counts_pie <- ggplot(merip_peaks_counts,
+       aes(x = "",
+           y = peaks,
+           fill = gene_feature)) +
+  geom_bar(stat = "identity", width = 1 ) +
+  labs(title = "Number of Significant MeRIP (m6A) peaks") +
+  coord_polar("y", start =0) +
+  theme_void() +
+  theme(legend.title = element_blank()) +
+  geom_text(aes(label = peaks), position=position_stack(vjust=0.5), size =3.5)
+
+merip_peaks_counts_pie
+
+ggsave("C:/Users/yared/Desktop/Mason_lab_xps/RP58_manuscript/Figures/MeRIPseq/merip_peaks_counts_pie.png")
+
+
+```
+```{r}
+
+
+# the m6A genes with methylation across genomic features are less interesting 
+# (although useful),
+# show some of the developmental genes in the colored chart and their methylation patterns
+# find novel genes in rnaseq not in literature
+# also show most upregulated and downregulated genes in each genomic features
+# so for example: Exons (most up and down genes), Utr3 (most up and down genes) etc etc etc 
+# look specifically at the 5'UTR genes
+
+merip_sig_peaks_diffl2fc <- read.csv("C:/Users/yared/Desktop/Mason_lab_xps/RP58_manuscript/Dataframes/merip_sig_peaks_diffl2fc.csv")
+
+merip_sig_peaks_diffl2fc <- subset(merip_sig_peaks_diffl2fc, select=-c(X))
+
+### 
+
+merip_sig_intron <- merip_sig_peaks_diffl2fc[grep("intron", merip_sig_peaks_diffl2fc$annot),]
+
+merip_sig_utr3 <- merip_sig_peaks_diffl2fc[grep("utr3", merip_sig_peaks_diffl2fc$annot),]
+
+merip_sig_utr5 <- merip_sig_peaks_diffl2fc[grep("utr5", merip_sig_peaks_diffl2fc$annot),]
+
+merip_sig_exon <- merip_sig_peaks_diffl2fc[grep("exon", merip_sig_peaks_diffl2fc$annot),]
+
+write.csv(merip_sig_exon, "C:/Users/yared/Desktop/Mason_lab_xps/RP58_manuscript/Dataframes/MeRIPseq/exon_merip_sig_peaks.csv")
+
+write.csv(merip_sig_intron, "C:/Users/yared/Desktop/Mason_lab_xps/RP58_manuscript/Dataframes/MeRIPseq/intron_merip_sig_peaks.csv")
+
+write.csv(merip_sig_utr3, "C:/Users/yared/Desktop/Mason_lab_xps/RP58_manuscript/Dataframes/MeRIPseq/utr3_merip_sig_peaks.csv")
+
+write.csv(merip_sig_utr5, "C:/Users/yared/Desktop/Mason_lab_xps/RP58_manuscript/Dataframes/MeRIPseq/utr5_merip_sig_peaks.csv")
+
+
+###
+
+#ECDF for merip peaks 
+
+utr3_bind <- cbind(merip_sig_utr3$diff.l2fc, rep("utr3", length(merip_sig_utr3$diff.l2fc)))
+
+utr5_bind <- cbind(merip_sig_utr5$diff.l2fc, rep("utr5", length(merip_sig_utr5$diff.l2fc)))
+
+exon_bind <- cbind(merip_sig_exon$diff.l2fc, rep("exon", length(merip_sig_exon$diff.l2fc)))
+
+intron_bind <- cbind(merip_sig_intron$diff.l2fc, rep("intron", length(merip_sig_intron$diff.l2fc)))
+
+stack_merip_ecdf_multiple <- rbind(utr3_bind, utr5_bind, exon_bind, intron_bind)
+
+merip_ecdf_multiple_dfs <- as.data.frame(stack_merip_ecdf_multiple)
+
+merip_ecdf_multiple_dfs$V1 <- as.numeric(merip_ecdf_multiple_dfs$V1)
+merip_ecdf_multiple_dfs$V2 <- as.factor(merip_ecdf_multiple_dfs$V2)
+
+merip_stack_ecdf_df <- merip_ecdf_multiple_dfs
+colnames(merip_stack_ecdf_df) <- c("log2fc", "group")
+
+
+merip_stack_ecdf_df %>%
+ggplot(aes(x=log2fc, col=group)) + stat_ecdf()
+
+
+### Create CDF for histone 1 genes vs. all genes. 
+
+### Merip ecdf of genomic features ###
+
+merip_genefeat_ecdf_plot <- merip_stack_ecdf_df %>%
+ggplot(aes(x=log2fc, col=group)) + 
+  theme_bw() +
+  theme(panel.border = element_blank(), legend.title = element_blank()) +
+  theme(axis.line = element_line(colour = "black")) +
+  stat_ecdf() +
+  xlim(-3,3) +
+  ylab("Cumulative density") +
+  annotate("text", y = 0.50, x = 0.5, label = "***") +
+  labs(caption = "5'UTR = p-value < 2.2e-16 ")
+
+merip_genefeat_ecdf_plot
+
+ggsave("C:/Users/yared/Desktop/Mason_lab_xps/RP58_manuscript/Figures/MeRIPseq/120221_merip_genefeat_ecdf_plot_intron.png")
+
+# Run a Mann-Whitney test on gene feature peaks
+
+merip_diffl2fc_genefeat <- qpcR:::cbind.na(merip_sig_utr5$diff.l2fc ,merip_sig_utr3$diff.l2fc, merip_sig_exon$diff.l2fc)
+
+colnames(merip_diffl2fc_genefeat) <- c("utr5","utr3","exon")
+
+
+wilcox.test(merip_sig_utr5$diff.l2fc, c(merip_sig_utr3$diff.l2fc,merip_sig_exon$diff.l2fc,merip_sig_intron$diff.l2fc))
+
+wilcox.test(merip_sig_intron$diff.l2fc, merip_sig_exon$diff.l2fc)
+
+apply(merip_diffl2fc_genefeat, 2, wilcox.test)
+
+# run Enrichr and use genes from downstream pathways -> then use them for groupings and 
+# analysis
+
+```
+
+```{r}
+
+# All significant genes that are present in rnaseq dataset that are also found in the MeRIP
+# significant peak dataset
+
+merip_rnaseq_sig_peaks_intersect <- merip_sig_peaks_diffl2fc[grep(paste(rp58_deseq_1$gene_symbol, collapse="|"), merip_sig_peaks_diffl2fc$main.gene), ]
+
+# add a conditional 
+
+#Exercise
+df_cnd_m <- df_cnd %>% mutate(value = case_when(a > 0 & b > 0 ~ TRUE,
+                                                a < 0 & b < 0 ~ TRUE,
+                                                a < 0 & b > 0 ~ FALSE,
+                                                a > 0 & b < 0 ~ FALSE
+                              ))
+#Exercise. Done.
+
+df_cnd_merip_gene <- merip_rnaseq_sig_peaks_intersect %>% mutate(value = case_when(merip_rnaseq_sig_peaks_intersect$gene.l2fc > 0 & merip_rnaseq_sig_peaks_intersect$diff.l2fc > 0 ~ TRUE,
+                                                merip_rnaseq_sig_peaks_intersect$gene.l2fc < 0 & merip_rnaseq_sig_peaks_intersect$diff.l2fc < 0 ~ TRUE,
+                                                merip_rnaseq_sig_peaks_intersect$gene.l2fc < 0 & merip_rnaseq_sig_peaks_intersect$diff.l2fc > 0 ~ FALSE,
+                                                merip_rnaseq_sig_peaks_intersect$gene.l2fc > 0 & merip_rnaseq_sig_peaks_intersect$diff.l2fc < 0 ~ FALSE
+                              ))
+
+df_cnd_merip_gene_utr3 <- df_cnd_merip_gene[grep("utr3", df_cnd_merip_gene$annot),]
+df_cnd_merip_gene_utr5 <- df_cnd_merip_gene[grep("utr5", df_cnd_merip_gene$annot),]
+df_cnd_merip_gene_exon <- df_cnd_merip_gene[grep("exon", df_cnd_merip_gene$annot),]
+df_cnd_merip_gene_intron<- df_cnd_merip_gene[grep("intron", df_cnd_merip_gene$annot),]
+
+
+write.csv(df_cnd_merip_gene, 'C:/Users/yared/Desktop/Mason_lab_xps/RP58_manuscript/Dataframes/df_cnd_merip_gene.csv')
+
+
+```
+
+
+```{r}
+
+# https://briatte.github.io/ggnet/
+
+
+```
+
+```{r}
+
+# Graph autism genes from SPARK db based on their gene scoring system
+
+autism_relatedgenes_score <- cbind(autism_sfari_df$gene.symbol, autism_sfari_df$gene.score)
+ 
+autism_relatedgenes_score <- as.data.frame(autism_relatedgenes_score)
+
+colnames(autism_relatedgenes_score) <- c("gene_symbol","score")
+
+autism_relatedgenes_score <- as.data.frame(autism_relatedgenes_score)
+
+# extract only the relevant autism genes based on GOI_autism_related_Subset$gene_symbol
+
+GOI_autism_related_subset_upper <- GOI_autism_related_Subset
+GOI_autism_related_subset_upper$gene_symbol <- toupper(GOI_autism_related_subset_upper$gene_symbol)
+GOI_autism_related_subset_upper <- as.data.frame(GOI_autism_related_subset_upper)
+
+#all autism gene present with score
+GOI_autism_score <- autism_relatedgenes_score[grep(paste(GOI_autism_related_subset_upper$gene_symbol, collapse="|"), autism_relatedgenes_score$gene_symbol), ]
+
+#
+GOI_autism_rp58_intersect_score <- autism_relatedgenes_score[grep(paste(GOI_autism_related_subset_upper$gene_symbol, collapse="|"), autism_relatedgenes_score$gene_symbol), ]
+
+
+
+autism_rp58_score_df <- full_join(GOI_autism_score, GOI_autism_related_subset_upper, by = "gene_symbol")
+
+autism_rp58_score_df_na <- autism_rp58_score_df %>% drop_na(score)
+
+autism_rp58_score_df_na <- autism_rp58_score_df_na %>% arrange(score)
+
+autism_rp58_score_df_na$score <- factor(autism_rp58_score_df_na$score, levels = c("1","2","3"))
+
+write.csv(autism_rp58_score_df_na, 'C:/Users/yared/Desktop/Mason_lab_xps/RP58_manuscript/Dataframes/autism_rp58_score_df_na.csv')
+
+### score 1 only 
+
+autism_rp58_score_1_only_df_na <- dplyr::filter(autism_rp58_score_df_na, grepl('1', score))
+
+write.csv(autism_rp58_score_1_only_df_na, 'C:/Users/yared/Desktop/Mason_lab_xps/RP58_manuscript/Dataframes/autism_rp58_score_1_only.csv')
+
+
+# read csv of SPARK df score 
+
+autism_rp58_score_df_na <- read.csv("C:/Users/yared/Desktop/Mason_lab_xps/RP58_manuscript/Dataframes/autism_rp58_score_df_na.csv") 
+
+## ggplot with score corresponding to color
+
+ggplot(arrange(autism_rp58_score_df_na, score), aes(x = gene_symbol ,y = log2FoldChange, fill = score)) +
+  geom_bar(stat="identity") +
+  coord_flip() +
+  theme_bw() +
+  theme(panel.border = element_blank(), legend.title = element_blank())
+
+
+ggsave("C:/Users/yared/Desktop/Mason_lab_xps/RP58_manuscript/Figures/RNAseq/autism_rp58_score_df_na.png")
+
+ggplot(autism_rp58_score_df_na, aes(x = score)) +
+  geom_histogram(stat="identity", fill = "score") +
+  coord_flip() +
+  theme_bw() +
+  theme(panel.border = element_blank(), legend.title = element_blank())
+
+###
+ggplot(Marriage, aes(x = age)) +
+  geom_histogram()
+
+ggplot(autism_rp58_score_df_na, aes(x = score, y = log2FoldChange)) +
+  geom_jitter(aes(col =factor(autism_rp58_score_df_na$score)), size = 2, alpha = 0.6) +
+  theme_bw() +
+  theme(panel.border = element_blank(), legend.title = element_blank()) +
+  xlab("spark_gene_score")+
+  ggtitle("SPARK gene score of autism related genes") 
+
+ggsave("C:/Users/yared/Desktop/Mason_lab_xps/RP58_manuscript/Figures/RNAseq/autism_rp58_spark_gene_score.png")
+
+## bar graph of autism gene score ##
+
+ggplot(autism_rp58_score_df_na, aes(x = score, y = log2FoldChange)) +
+  geom_jitter(aes(col =factor(autism_rp58_score_df_na$score)), size = 2, alpha = 0.6) +
+  theme_bw() +
+  theme(panel.border = element_blank(), legend.title = element_blank()) +
+  xlab("spark_gene_score")+
+  ggtitle("SPARK gene score of autism related genes") 
+
+###
+
+
+###
+
+gpp <- ggplot(autism_rp58_score_df_na, aes(x = score)) +
+  geom_histogram(aes(fill =factor(autism_rp58_score_df_na$score)),  stat = "count",
+                 width = 0.7) +
+  theme_bw() +
+  theme(panel.border = element_blank(), legend.title = element_blank()) +
+  xlab("spark_gene_score") +
+  ylab("# of genes") +
+  ggtitle("SPARK gene score of autism related genes") 
+
+
+ggsave("C:/Users/yared/Desktop/Mason_lab_xps/RP58_manuscript/Figures/RNAseq/autism_rp58_spark_gene_score_count_histo_colors.png")
+
+## with specified colors ##
+
+gpp +
+  scale_fill_manual(values =  c("1" = "purple",
+                                "2" = "brown",
+                                "3" = "turquoise"
+  ))
+
+
+
+
+# 12/21/2021
+### ggplot only the subset of score 1 from the intersect of SPARK and RP58 datasets
+
+ggplot(autism_rp58_score_1_only_df_na, aes(x = log2FoldChange ,y = -log10(padj))) +
+  geom_jitter(size = 2, alpha = 0.6, color = "orange") +
+  geom_text(label = autism_rp58_score_1_only_df_na$gene_symbol, size = 4, nudge_x = 0, nudge_y = .55, check_overlap = T) +
+  theme_bw() +
+  theme(panel.border = element_blank(), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), legend.title = element_blank()) +
+  xlab("log2fc") +
+  ylim(0,15) +
+  ggtitle("SPARK genes - Score 1") +
+  geom_vline(xintercept=c(0), linetype='dashed', color = 'black') 
+  
+
+ggsave("C:/Users/yared/Desktop/Mason_lab_xps/RP58_manuscript/Figures/RNAseq/autism_rp58_score_1_only_df_na.png")
+
+
+
+
+
+
+```
+
+
+
+```{r}
+
+###### Exercise 
+data1 <- data.frame(ID = 1:2,
+                    X1 = c("a1", "a2"),
+                    stringsAsFactors = FALSE)
+
+data2 <- data.frame(gene_symbol = c("ABC", "EFG"),
+                    score = c("25", "50"),
+                    stringsAsFactors = FALSE)
+
+data3 <- data.frame(gene_symbol = c("ABC","EFG", "HIJ"),
+                    l2fc = c("0.5", "1", "2"),
+                    padj = c("0.0134", "0.0999", "0.567"),
+                    stringsAsFactors = FALSE)
+
+df_df <- full_join(data2, data3, by = c("gene_symbol"))
+
+### autism score merge with rp58_autism_subset df
+
+
+```
+
+
+```{r}
+
+# EnrichR graphs 
+
+library(ggplot2)
+library(dplyr)
+library(forcats)
+
+kegg <- read.csv("c:/Users/yared/Desktop/Mason_lab_xps/RP58_manuscript/Dataframes/EnrichR_rnaseq/Pathways/Kegg2021_rnaseq_rp58_Enrichment_Analysis_Visualizer_data.csv")
+
+kegg_10 <- kegg[1:10,]
+kegg_10$q.value <- as.numeric(kegg_10$q.value)
+
+kegg_10 %>%
+  mutate(term = fct_reorder(term, q.value)) %>%
+ggplot(aes(x = term ,y = q.value)) +
+  geom_bar(aes(fill = q.value),stat="identity") +
+  coord_flip() +
+  theme_bw() +
+  xlab("") +
+  theme(panel.border = element_blank(), legend.title = element_blank())
+
+
+ggsave("C:/Users/yared/Desktop/Mason_lab_xps/RP58_manuscript/Figures/RNAseq/EnrichR_kegg_10.png")
+
+#### 
+msigdb <- read.csv("c:/Users/yared/Desktop/Mason_lab_xps/RP58_manuscript/Dataframes/EnrichR_rnaseq/Pathways/mSigdb_rnaseqrp58_Enrichment_Analysis_Visualizer_data.csv")
+
+msigdb_10 <- msigdb[1:10,]
+msigdb_10 <- msigdb_10 %>% arrange(desc(q.value))
+msigdb_10$q.value <- as.numeric(msigdb_10$q.value)
+
+
+msigdb_10 %>%
+  mutate(term = fct_reorder(term,q.value)) %>%
+ggplot(aes(x = term ,y = q.value)) +
+  geom_bar(aes(fill = q.value),stat="identity") +
+  coord_flip() +
+  xlab("") +
+  theme_bw() +
+  theme(panel.border = element_blank(), legend.title = element_blank())
+
+ggsave("C:/Users/yared/Desktop/Mason_lab_xps/RP58_manuscript/Figures/RNAseq/EnrichR_msigdb10.png")
+
+#################################
+
+
+human_ont_rnaseq <- read.csv("c:/Users/yared/Desktop/Mason_lab_xps/RP58_manuscript/Dataframes/EnrichR_rnaseq/Ontologies/human_phenotype_ontology_rnaseqrp58_Enrichment_Analysis_Visualizer_data.csv ")
+
+human_ont_rnaseq_10 <- human_ont_rnaseq[1:10,]
+human_ont_rnaseq_10 <- human_ont_rnaseq_10 %>% arrange(desc(q.value))
+human_ont_rnaseq_10$q.value <- as.numeric(human_ont_rnaseq_10$q.value)
+
+
+human_ont_rnaseq_10 %>%
+  mutate(term = fct_reorder(term,q.value)) %>%
+ggplot(aes(x = term ,y = q.value)) +
+  geom_bar(aes(fill = q.value), stat="identity") +
+  coord_flip() +
+  xlab("") +
+  theme_bw() +
+  theme(panel.border = element_blank(), legend.title = element_blank())
+
+ggsave("C:/Users/yared/Desktop/Mason_lab_xps/RP58_manuscript/Figures/RNAseq/human_ont_rnaseq_10.png")
+
+############ reactome db from EnrichR must log it( range is too narrow)
+
+
+#### TFs from EnrichR db ###
+
+
+```
+
+```{r}
+
+### 
+# Exercise #
+
+data <- data.frame(name = c("north", "south", "south-east", "north-west", "south-west",
+                            "north-east", "west", "east"),
+                   val = sample(seq(1,10),8))
+
+msigdb_10 %>%
+  mutate(term = fct_reorder(term, desc(p.value))) %>%
+  ggplot(aes(x=term,y=p.value)) +
+  geom_bar(stat = "identity",
+           fill = "#f68060") +
+  coord_flip() 
+
+
+## enrichr 
+
+
+gobioont_rnaseq <- read.csv("c:/Users/yared/Desktop/Mason_lab_xps/RP58_manuscript/Dataframes/EnrichR_rnaseq/Ontologies/GO_biological_process_Enrichment_Analysis_Visualizer_data.csv")
+
+gobio_ont_rnaseq_10 <- gobio_ont_rnaseq[1:10,]
+gobio_ont_rnaseq_10 <- gobio_ont_rnaseq_10 %>% arrange(desc(q.value))
+gobio_ont_rnaseq_10$q.value <- as.numeric(gobio_ont_rnaseq_10$q.value)
+
+
+gobio_ont_rnaseq_10 %>%
+  mutate(term = fct_reorder(term,q.value)) %>%
+ggplot(aes(x = term ,y = q.value)) +
+  geom_bar(aes(fill = q.value), stat="identity") +
+  coord_flip() +
+  xlab("") +
+  theme_bw() +
+  theme(panel.border = element_blank(), legend.title = element_blank())
+
+ggsave("C:/Users/yared/Desktop/Mason_lab_xps/RP58_manuscript/Figures/RNAseq/enrichr_rnaseq/gobio_ont_rnaseq_10.png")
+
+
+
+
+```
+
+
+```{r}
+
+#### Enrichr for 5'UTR genes #####
+
+library(forcats)
+
+gobio_5utr <- read.csv("c:/Users/yared/Desktop/Mason_lab_xps/RP58_manuscript/Dataframes/EnrichR_meripseq/Ontologies/5utr_gobiological_Enrichment_Analysis_Visualizer_data.csv")
+
+gobio_5utr_10 <- gobio_5utr[1:10,]
+gobio_5utr_10 <- gobio_5utr_10 %>% arrange(desc(q.value))
+gobio_5utr_10$p.value <- as.numeric(gobio_5utr_10$q.value)
+
+
+gobio_5utr_10 %>%
+  mutate(term = fct_reorder(term,q.value)) %>%
+ggplot(aes(x = term ,y = q.value)) +
+  geom_bar(stat="identity",fill = "grey") +
+  coord_flip() +
+  xlab("") +
+  theme_bw() +
+  theme(panel.border = element_blank(), legend.title = element_blank())
+
+ggsave("C:/Users/yared/Desktop/Mason_lab_xps/RP58_manuscript/Figures/MeRIPseq/EnrichR_gobio_5utr.png")
+
+#######################
+
+gomol_5utr <- read.csv("c:/Users/yared/Desktop/Mason_lab_xps/RP58_manuscript/Dataframes/EnrichR_meripseq/Ontologies/5utr_gomolecular_Enrichment_Analysis_Visualizer_data.csv")
+
+gomol_5utr_10 <- gomol_5utr[1:10,]
+gomol_5utr_10 <- gomol_5utr_10 %>% arrange(desc(q.value))
+gomol_5utr_10$q.value <- as.numeric(gomol_5utr_10$q.value)
+
+
+gomol_5utr_10 %>%
+  mutate(term = fct_reorder(term,q.value)) %>%
+ggplot(aes(x = term ,y = q.value)) +
+  geom_bar(stat="identity",fill = "grey") +
+  coord_flip() +
+  xlab("") +
+  theme_bw() +
+  theme(panel.border = element_blank(), legend.title = element_blank())
+
+ggsave("C:/Users/yared/Desktop/Mason_lab_xps/RP58_manuscript/Figures/MeRIPseq/EnrichR_gomol_5utr.png")
+
+
+################################################################################
+
+
+gohuman_5utr <- read.csv("c:/Users/yared/Desktop/Mason_lab_xps/RP58_manuscript/Dataframes/EnrichR_meripseq/Ontologies/5utr_human_phenotype_ontology_Enrichment_Analysis_Visualizer_data.csv")
+
+gohuman_5utr_10 <- gohuman_5utr[1:10,]
+gohuman_5utr_10 <- gohuman_5utr_10 %>% arrange(desc(q.value))
+gohuman_5utr_10$q.value <- as.numeric(gohuman_5utr_10$q.value)
+
+
+gohuman_5utr_10 %>%
+  mutate(term = fct_reorder(term,q.value)) %>%
+ggplot(aes(x = term ,y = q.value)) +
+  geom_bar(stat="identity",fill = "grey") +
+  coord_flip() +
+  xlab("") +
+  theme_bw() +
+  theme(panel.border = element_blank(), legend.title = element_blank())
+
+ggsave("C:/Users/yared/Desktop/Mason_lab_xps/RP58_manuscript/Figures/MeRIPseq/EnrichR_gohuman_5utr_10.png")
+
+
+####################
+
+gohuman_5utr <- read.csv("c:/Users/yared/Desktop/Mason_lab_xps/RP58_manuscript/Dataframes/EnrichR_meripseq/Ontologies/5utr_human_phenotype_ontology_Enrichment_Analysis_Visualizer_data.csv")
+
+gohuman_5utr_10 <- gohuman_5utr[1:10,]
+gohuman_5utr_10 <- gohuman_5utr_10 %>% arrange(desc(q.value))
+gohuman_5utr_10$q.value <- as.numeric(gohuman_5utr_10$q.value)
+
+
+gohuman_5utr_10 %>%
+  mutate(term = fct_reorder(term,q.value)) %>%
+ggplot(aes(x = term ,y = q.value)) +
+  geom_bar(stat="identity",fill = "grey") +
+  coord_flip() +
+  xlab("") +
+  theme_bw() +
+  theme(panel.border = element_blank(), legend.title = element_blank())
+
+ggsave("C:/Users/yared/Desktop/Mason_lab_xps/RP58_manuscript/Figures/MeRIPseq/EnrichR_gohuman_5utr_10.png")
+
+
+
+#############
+
+mgimammal_5utr <- read.csv("c:/Users/yared/Desktop/Mason_lab_xps/RP58_manuscript/Dataframes/EnrichR_meripseq/Ontologies/5utr_mgi_mammalian_Enrichment_Analysis_Visualizer_data.csv")
+
+mgimammal_5utr_10 <- mgimammal_5utr[1:10,]
+mgimammal_5utr_10 <- mgimammal_5utr_10 %>% arrange(desc(q.value))
+mgimammal_5utr_10$q.value <- as.numeric(mgimammal_5utr_10$q.value)
+
+
+mgimammal_5utr_10 %>%
+  mutate(term = fct_reorder(term,q.value)) %>%
+ggplot(aes(x = term ,y = q.value)) +
+  geom_bar(stat="identity",fill = "grey") +
+  coord_flip() +
+  xlab("") +
+  theme_bw() +
+  theme(panel.border = element_blank(), legend.title = element_blank())
+
+ggsave("C:/Users/yared/Desktop/Mason_lab_xps/RP58_manuscript/Figures/MeRIPseq/EnrichR_mgimammal_5utr_10.png")
+
+
+```
+
+```{r}
+
+# rp58 tissue expression
+
+rp58_rpkm_tissues <- read.csv("c:/Users/yared/Desktop/Mason_lab_xps/RP58_manuscript/Dataframes/rp58_rpkm_tissue.csv")
+
+colnames(rp58_rpkm_tissues) <- c("Organ", "RPKM", "SD")
+
+# create histogram and color pink and blue the respective sex organs. Placenta, ovary, uterus vs. prostate, testis. 
+# add SD
+
+rp58_rpkm_tissues_ggplot <- ggplot(rp58_rpkm_tissues, aes(x = Organ, y = RPKM)) + geom_bar(stat = "identity", fill = "grey", colour = "white") +
+  xlab("") +
+  theme_bw()+
+  theme(panel.border = element_blank(), axis.title = element_text(size = 9) ,axis.text.x = element_text(size = 10, angle = 90),legend.title = element_blank(), panel.grid.major = element_blank()) +
+  geom_errorbar(aes(ymin = RPKM-SD, ymax = RPKM+SD), width=.2)+
+  coord_flip()
+
+rp58_rpkm_tissues_ggplot 
+
+ggsave("C:/Users/yared/Desktop/Mason_lab_xps/RP58_manuscript/Figures/RNAseq/rp58_rpkm_tissues.png")
+
+
+```
+
+```{r}
+
+# Transcription factors present in sig RNAseq data !
+
+tf_all_db <- read.csv("c:/Users/yared/Desktop/Mason_lab_xps/RP58_manuscript/Dataframes/TFs.csv", header = FALSE)
+
+colnames(tf_all_db) <- "gene_symbol_tfs"
+
+tf_all_db <- tf_all_db[-1,]
+
+#
+tf_all_db <- as.data.frame(tf_all_db)
+colnames(tf_all_db) <- "gene_symbol"
+
+tfs_name <- str_to_title(tf_all_db_genes)
+tfs_name <- as.data.frame(tfs_name)
+tfs_name$tfs_name <- as.character(tfs_name$tfs_name)
+
+#
+RP58_deseq_output$gene_symbol <- toupper(RP58_deseq_output$gene_symbol)
+
+#
+GOI_autism_related_Subset <- RP58_deseq_output[grep(paste(autism_relatedgenes, collapse="|"), RP58_deseq_output$gene_symbol), ]
+
+# vec_gene <- c("CLDN3","ZC3H7A", "RBFOX1"," PLPPR5","PRKAR1B","LAMB1","FGF10","MMP17")
+# vec_gene_2 <- tf_all_db[1:50,]
+
+# slice it into 2 
+
+slice_one_tf <- tf_all_db[1:819,]
+slice_two_tf <- tf_all_db[820:1638,]
+
+#
+#GOI_tfs_rp58_rnaseq_one <- RP58_deseq_output[grep(paste(vec_gene, collapse="|"), RP58_deseq_output$gene_symbol), ]
+
+##### merge function
+library(dplyr)
+
+df_test <- merge(x = tf_all_db, y =RP58_deseq_output, by = "gene_symbol")
+
+rp58_dge_tfs <- df_test
+rp58_dge_tfs_desc <- rp58_dge_tfs %>% arrange(desc(log2FoldChange))
+
+# save 66 tfs (intersectional with RP58 data)
+write.csv(rp58_dge_tfs_desc, 'c:/Users/yared/Desktop/Mason_lab_xps/RP58_manuscript/Dataframes/TF_rp58_list.csv')
+
+# positive and negative regulated TF's 
+
+abcd <- rp58_dge_tfs(rp58_dge_tfs$log2FoldChange > 0)
+
+tfs_rp58_up <- rp58_dge_tfs[(rp58_dge_tfs[,4]>0),]
+
+top10_tfs_rp58 <- rp58_dge_tfs_desc[0:10,]
+last10_tfs_rp58 <- tail(rp58_dge_tfs_desc, n=10)
+
+tfs_rp58_down <- rp58_dge_tfs[(rp58_dge_tfs[,4]<0),]
+
+# plot the DGE TF's 
+
+library(viridis)
+
+#ggplot() + geom_bar(aes(reorder(Brand,avg_mpg),avg_mpg, fill = avg_mpg), stat = 'identity') + scale_fill_viridis_c(option = 'magma')
+
+tfs_rp58 <- ggplot(rp58_dge_tfs, aes(x = reorder(gene_symbol,log2FoldChange) ,y = log2FoldChange)) + geom_bar(aes(fill = log2FoldChange  ,stat = "identity")) +
+  scale_color_viridis() +
+  coord_flip() +
+  theme_bw() +
+  theme(panel.border = element_blank(), legend.title = element_blank())
+  
+
+tfs_rp58
+
+# example using viridis
+
+ggplot(data.frame(x = rnorm(10000), y = rnorm(10000)), aes(x = x, y = y)) +
+  geom_hex() + coord_fixed() +
+  scale_fill_viridis() + theme_bw()
+
+# 2nd ex.
+
+p <- ggplot(mtcars, aes(wt, mpg))
+p + geom_point(size=4, aes(colour = factor(cyl))) +
+    scale_color_viridis(discrete=TRUE) +
+    theme_bw()
+  
+# ex. using my dataset
+
+pq <- ggplot(rp58_dge_tfs, aes(x =reorder(gene_symbol,log2FoldChange) ,y = log2FoldChange))
+
+pq + geom_bar(stat = 'identity', aes(fill=factor(log2FoldChange))) + scale_fill_viridis(option = 'magma', discrete = TRUE) +
+  guides(fill = FALSE) +
+  theme_bw() +
+  theme(panel.border = element_blank(), legend.title = element_blank(),  axis.text.y = element_text(size = 6)) +
+  coord_flip() +
+  xlab('TF - gene symbol')
+
+
+ggsave("C:/Users/yared/Desktop/Mason_lab_xps/RP58_manuscript/Figures/031522_TFs_DGE_RNAseq_RP58.png")
+
+###
+top10_tfs_rp58 <- rp58_dge_tfs_desc[0:10,]
+last10_tfs_rp58 <- tail(rp58_dge_tfs_desc, n=10)
+####
+
+### RP58 - Tfs upregulated ###
+
+pq_up <- ggplot(top10_tfs_rp58, aes(x =reorder(gene_symbol,log2FoldChange) ,y = log2FoldChange))
+
+pq_up + geom_bar(stat = 'identity', aes(fill=factor(log2FoldChange))) + scale_fill_viridis(option = 'magma', discrete = TRUE) +
+  guides(fill = FALSE) +
+  theme_bw() +
+  theme(panel.border = element_blank(), legend.title = element_blank(),  axis.text.y = element_text(size = 6)) +
+  coord_flip() +
+  xlab('') 
+
+
+ggsave("C:/Users/yared/Desktop/Mason_lab_xps/RP58_manuscript/Figures/RNAseq/042222_TFs_UP_RNAseq_RP58.png")
+
+### RP58 - Tfs downregulated ###
+
+pq_down <- ggplot(last10_tfs_rp58, aes(x =reorder(gene_symbol,log2FoldChange) ,y = log2FoldChange))
+
+pq_down + geom_bar(stat = 'identity', aes(fill=factor(log2FoldChange))) + scale_fill_viridis(option = 'magma', discrete = TRUE) +
+  guides(fill = FALSE) +
+  theme_bw() +
+  theme(panel.border = element_blank(), legend.title = element_blank(),  axis.text.y = element_text(size = 6)) +
+  coord_flip() +
+  xlab('')
+
+
+ggsave("C:/Users/yared/Desktop/Mason_lab_xps/RP58_manuscript/Figures/RNAseq/042222_TFs_DOWN_RNAseq_RP58.png")
+
+
+
+```
+
+
+
+
+
+
+
+
+```{r}
+
+# useless chunks
+
+GOI_microcephaly <- c("SOX11", "^Id", "ZIC2", "Lmnb1", "Nr2e1", "Lingo1", "Cenpj", "Stil", "Cep152", "Cep63", "CDK5RAP2", "PLK4", "ASPM", "DHTKD1", "ERCC6", "TRAPPC9", "TRMT10A", "KAT6A", "HDAC8", "MT-ATP6", "SLC9A6", "DYRK1A", "FBXO11", "KMT2A", "NACC1", "POGZ", "PTPN11", "TLK2", "KARS", "STXBP1", "TRIO", "MECP2", "PQBP1", "SPAG5", "TEDC1", "DDX1", "VPS26A", "ZNRF3")
+
+
+GOI_micro <- as.data.frame(GOI_microcephaly)
+colnames(GOI_micro) <- "microcephaly"
+GOI_micro <- str_to_title(GOI_micro)
+
+RP58_deseq_output$gene_symbol <- toupper(RP58_deseq_output$gene_symbol) 
+
+GOI_microcephaly_related_Subset_test <- RP58_deseq_output[grep(paste(slice_one_tf, collapse="|"), RP58_deseq_output$gene_symbol), ]
+
+
+
+```
+
+
+```{r}
+
+## 03/17/2022
+## Volcano plot, color sig genes
+
+all_dge <- DGE_deseq_results_all_padj_genenames
+rp58_list <- as.data.frame(RP58_deseq_output$gene_symbol)
+colnames(rp58_list) <- "gene_symbol"
+
+df_test_rp58 <- merge(x = RP58_deseq_output$gene_symbol, y = DGE_deseq_results_all_padj_genenames, by = "gene_symbol")
+
+
+
+## ggplot it - volcano ## make the significant ones different color, padj < 0.05
+
+volcanoplot_allgenes_RNAseq_RP58_colors <- ggplot(DGE_deseq_results_all_padj_genenames) +
+  geom_point(aes(x=log2FoldChange, y=-log10(padj)), size = 0.1) +
+  geom_point(data = RP58_deseq_output,
+             aes(x = log2FoldChange, y=-log10(padj),
+                 colour=log2FoldChange > 0)) +
+  labs(caption = "Total genes=916") +
+  ggtitle("Differentially expressed genes") +
+  scale_colour_manual(name = 'log2fc > 0',
+                      values = setNames(c('turquoise','maroon'),c(T,F))) +
+  xlab("log2fc") +
+  ylab("-log10 padj") +
+  xlim(-3,3) +
+  ylim(0,5) +
+  theme(legend.position = "none",
+        plot.title = element_text(size = rel(1), hjust = 0.5)) +
+  geom_text_repel(data= subset(DGE_deseq_results_all_padj_genenames, -log10(padj) > 0.05), aes(x=log2FoldChange, y=-log10(pvalue), label = gene_symbol)) +
+  #geom_hline(yintercept=2, linetype='dashed', color = 'black') +
+  #geom_vline(xintercept=c(-2,2), linetype='dashed', color = 'black') +
+  theme_bw() 
+
+
+volcanoplot_allgenes_RNAseq_RP58_colors
+
+ggsave("C:/Users/yared/Desktop/Mason_lab_xps/RP58_manuscript/Figures/RNAseq/121921_volcanoplot_allgenes_RNAseq_RP58_col.png")
+
+
+```
+
+```{r}
+
+# genes that are likely to cause haploinsufficiency (based on Huang et al. 2010)
+
+# load dataset S2
+
+HI_prob_dataset_s2 <- read.csv("C:/Users/yared/Desktop/Mason_lab_xps/RP58_manuscript/Databases/HI_prediction_w_imputation_bed_dataset_S2.csv")
+
+HI_prob_dataset_s2 <- HI_prob_dataset_s2 %>% arrange(desc(score))
+
+View(HI_prob_dataset_s2)
+
+### split string 
+
+HI_prob_dataset_s2_gene <- as.data.frame(str_split_fixed(HI_prob_dataset_s2$gene_symbol, '\\|', 3))
+
+HI_prob_dataset_s2_gene <- HI_prob_dataset_s2_gene$V1
+colnames(HI_prob_dataset_s2_gene) <- "gene_symbol"
+
+HI_prob_dataset_s2$gene_symbol <- HI_prob_dataset_s2_gene$gene_symbol 
+
+# Finalized dataset with prob 'score' and gene_symbol
+HI_prob_dataset_s2
+
+write.csv(HI_prob_dataset_s2, 'C:/Users/yared/Desktop/Mason_lab_xps/RP58_manuscript/Dataframes/HI_prob_dataset_s2_huang_mod.csv')
+
+#### merge ex. ####
+
+all_dge <- DGE_deseq_results_all_padj_genenames
+all_dge$gene_symbol <- toupper(all_dge$gene_symbol)
+
+rp58_list <- as.data.frame(RP58_deseq_output$gene_symbol)
+colnames(rp58_list) <- "gene_symbol"
+
+df_test_rp58 <- merge(x = rp58_list, y = all_dge, by = "gene_symbol")
+
+####
+
+# genes from RP58 dataset
+rp58_list <- as.data.frame(RP58_deseq_output$gene_symbol)
+colnames(rp58_list) <- "gene_symbol"
+
+# merge HI genes dataset with RP58 DEGs
+
+HI_prob_dataset_s2_mod <- read.csv("C:/Users/yared/Desktop/Mason_lab_xps/RP58_manuscript/Dataframes/HI_prob_dataset_s2_huang_mod.csv")
+
+pHI_merge_rp58_huang <- merge(x = rp58_list, y = HI_prob_dataset_s2_mod, by = "gene_symbol")
+
+#
+msigdb_10 %>%
+  mutate(term = fct_reorder(term,q.value)) %>%
+ggplot(aes(x = term ,y = q.value)) +
+  geom_bar(aes(fill = q.value),stat="identity") +
+  coord_flip() +
+  xlab("") +
+  theme_bw() +
+  theme(panel.border = element_blank(), legend.title = element_blank())
+#
+
+
+pHI_merge_rp58_huang_desc <- pHI_merge_rp58_huang %>% arrange(desc(score))
+
+ggplot(pHI_merge_rp58_huang_desc, aes(x=score)) +
+  geom_histogram(fill = "cornflowerblue",
+                 color = "white")
+
+## 
+pHI_merge_rp58_huang_desc %>%
+  group_by(score) %>%
+  summarise(count = n()) %>%
+  ggplot(aes(x = reorder(score,(-count)), y = count)) +
+  geom_histogram(stat = 'identity', binwidth = 10) +
+  theme_bw()
+  
+## density 
+
+ggplot(pHI_merge_rp58_huang_desc, aes(x=score)) +
+  geom_density(color = "indianred3") + 
+  labs(title = "Probability of haploinsufficiency among DEGs in RP58 transcriptome",
+       x = "Haploinsufficiency probability score",
+       y = "Frequency")
+  theme_bw()
+
+  
+
+```
+
+
+```{r}
+
+
+# RVIS score of RP58 DEG + Autism genes
+
+RP58_deseq_output <- read.csv("C:/Users/yared/Desktop/Mason_lab_xps/rp58_rnaseq_featurecounts/output_deseq2/20201112_DGE_RP58_E14_Ctx.csv")
+
+RP58_deseq_output$gene_symbol <- paste("", RP58_deseq_output$gene_symbol, sep =",")
+
+rp58_deseq_output_comma_genelist <- RP58_deseq_output$gene_symbol
+
+write.table(rp58_deseq_output_comma_genelist, "C:/Users/yared/Desktop/Mason_lab_xps/RP58_manuscript/Dataframes/rp58_deseq_output_comma_genelist.txt",quote = FALSE, row.names = FALSE, col.names = FALSE)
+
+rp58_list <- as.data.frame(RP58_deseq_output$gene_symbol)
+colnames(rp58_list) <- "gene_symbol"
+rp58_list <- toupper(rp58_list$gene_symbol
+rp58_list <- as.data.frame(rp58_list)                            
+colnames(rp58_list) <- "gene_symbol" 
+
+colnames(RVIS_df)[4]<-"RVIS %"
+colnames(RVIS_df)[3]<-"RVIS"
+
+# 
+
+# rp58 transcriptome merged with RVIS
+df_rvis_merge_rp58 <- merge(x = rp58_list, y = RVIS_df, by = "gene_symbol")
+df_rvis_merge_rp58 <- df_rvis_merge_rp58 %>% arrange(desc(`RVIS %`))
+
+# autism intersect df
+rp58_autism_genelist <- read.csv("C:/Users/yared/Desktop/Mason_lab_xps/RP58_manuscript/Dataframes/RNAseq/rp58_autism_intersect.csv")
+
+rp58_autism_genelist <- rp58_autism_genelist$gene_symbol
+rp58_autism_genelist <- as.data.frame(rp58_autism_genelist)
+colnames(rp58_autism_genelist) <- "gene_symbol"
+
+
+### RVIS df
+
+RVIS_df <- read.csv("C:/Users/yared/Desktop/Mason_lab_xps/RP58_manuscript/Databases/RVIS_Unpublished_ExACv2_March2017.csv")
+
+#plot RVIS autism genes only (~65-72) that are affected in rp58
+
+df_rvis_merge_rp58_allautismgenes <- merge(x = rp58_autism_genelist, y = RVIS_df, by = "gene_symbol")
+
+df_rvis_merge_rp58_allautismgenes <- df_rvis_merge_rp58_allautismgenes %>% arrange(desc(`RVIS %`))
+
+## save RVIS dfs
+write.csv(df_rvis_merge_rp58_allautismgenes, "C:/Users/yared/Desktop/Mason_lab_xps/RP58_manuscript/Dataframes/df_rvis_merge_rp58_allautismgenes.csv")
+write.csv(df_rvis_merge_rp58, "C:/Users/yared/Desktop/Mason_lab_xps/RP58_manuscript/Dataframes/df_rvis_merge_rp58.csv")
+
+
+
+```
+
+
+```{r}
+
+TF_RVIS <- read.csv('C:/Users/yared/Desktop/Mason_lab_xps/RP58_manuscript/Dataframes/TF_top_bot_10_rp58_list.csv') 
+
+colnames(TF_RVIS)[1] <- "gene_symbol"
+
+colnames(TF_RVIS)[11] <- "RVIS_1"
+
+TF_RVIS_log <- cbind(TF_RVIS, -log10(TF_RVIS$RVIS_1))
+
+colnames(TF_RVIS_log)[12] <- "RVIS_log"
+
+
+ggplot(TF_RVIS_log,
+       aes(x = log2FoldChange, y = -log10(padj), size = RVIS_log, label = gene_symbol)) +
+  geom_point(alpha = .5,
+             fill = "cornflowerblue",
+             color = "black",
+             shape = 21) +
+  ylim(0,30) +
+  xlab("log2fc") +
+  theme_minimal()+
+  geom_text_repel(show.legend = F, size = 3, point.padding = unit(0.3, "lines"), box.padding = unit(1, "lines")) +
+  geom_vline(xintercept=c(0,0), linetype='dashed', color = 'black')
+
+#theme(legend.position = "none") +
+
+ggsave("C:/Users/yared/Desktop/Mason_lab_xps/RP58_manuscript/Figures/RNAseq/082922_TOP_TFs_RVIS_dashed_log.png")
+
+
+# geom_point change
+
+ggplot(TF_RVIS,
+       aes(x = log2FoldChange, y = -log10(padj), label = gene_symbol)) +
+  geom_point(aes(x = log2FoldChange, y = -log10(padj), size = RVIS, label = gene_symbol),
+             alpha = .5,
+             fill = "cornflowerblue",
+             color = "black",
+             shape = 21) +
+  ylim(0,30) +
+  xlab("log2fc") +
+  theme_minimal()+
+  theme(legend.position = "none") +
+  geom_vline(xintercept=c(0,0), linetype='dashed', color = 'black') 
+
+
+
+
+ggsave("C:/Users/yared/Desktop/Mason_lab_xps/RP58_manuscript/Figures/RNAseq/082922_TOP_TFs_RVIS_dashed_log.png")
+
+
+
+```
+
+```{r}
+
+# MotifMap table
+
+library(dplyr)
+
+motifmap <- read.csv("C:/Users/yared/Desktop/Mason_lab_xps/RP58_manuscript/Dataframes/motifmap_RP58_exportMotifLocations.csv")
+
+colnames(motifmap)[15] <- "gene_symbol"
+
+df_motifmap_merge_rp58 <- merge(x = motifmap, y = RP58_deseq_output, by = "gene_symbol")
+df_motifmap_merge_rp58_deseq_output <- merge(x = RP58_deseq_output, y = motifmap, by = "gene_symbol")
+motifmap_complete <- df_motifmap_merge_rp58_deseq_output
+motifmap_table <- cbind(motifmap_complete$gene_symbol, motifmap_complete$X, motifmap_complete$chromosome, motifmap_complete$description, motifmap_complete$log2FoldChange)
+
+motifmap_table <- as.data.frame(motifmap_table)
+
+colnames(motifmap_table) <- c("Gene symbol", "Accession number", "Chromosome", "Description", "Log2fc")
+
+mmt_unique <- motifmap_table[!duplicated(motifmap_table$`Gene symbol`),]
+
+write.csv(mmt_unique, "C:/Users/yared/Desktop/Mason_lab_xps/RP58_manuscript/Dataframes/Figure_table_TFs_RP58motif.csv")
+
+### MotifMap final spreadsheet - log ordered TFs
+
+motifmap_abc_order <- read.csv("C:/Users/yared/Desktop/Mason_lab_xps/RP58_manuscript/Dataframes/Figure_table_TFs_RP58motif.csv")
+
+
+motifmap_abc_order[1] <- NULL
+
+motifmap_log_order <- motifmap_abc_order %>% arrange(desc(Log2fc)) 
+
+colnames(motifmap_log_order) <- c("Gene symbol", "Accession number", "Chromosome", "Description", "Log2fc")
+
+
+write.csv(motifmap_log_order, "C:/Users/yared/Desktop/Mason_lab_xps/RP58_manuscript/Dataframes/082922_Figure_table_TFs_RP58motifmap_log_order.csv", row.names = FALSE)
+
+         
+```
+
+```{r}
+
+# Find the likelihood of finding the subset of autism genes in other datasets.
+# Mason's request, should end up in supplementary data
+
+## Explore: https://bioconductor.org/packages/release/data/experiment/vignettes/msigdb/inst/doc/msigdb.html
+
+
+# Use MSigDB for databases
+
+library(msigdbr)
+
+# all gene sets for a mouse
+
+all_gene_sets = msigdbr(species = "Mus musculus")
+
+msigdbr_collections()
+
+# Extract a collection of genes called immunesigDB
+
+# https://www.cell.com/immunity/pdf/S1074-7613(15)00532-4.pdf
+
+imsdb_df <- msigdbr(species = "mouse", category = "C7", subcategory = "IMMUNESIGDB")
+
+View(as.data.frame(imsdb_df))
+
+imsdb_df_df <- as.data.frame(imsdb_df)
+
+#filter the dataset by a subset of interest
+
+target_categories <- c("GSE16385_MONOCYTE_VS_MACROPHAGE_DN", "GSE16385_MONOCYTE_VS_MACROPHAGE_UP")
+
+# 1 category
+abcd <- imsdb_df %>%
+  dplyr::filter(gs_name == "GSE16385_MONOCYTE_VS_MACROPHAGE_DN")
+
+# Multiple categories, pipe the vector
+abcdf <- imsdb_df %>%
+  dplyr::filter(gs_name %in% target_categories)
+
+# One finalized database to check our selected DGEs against (a subset of immune genes from a random experiment)
+
+immune_final_df <- as.data.frame(abcdf)
+
+# Generate 2nd database of interest
+imsdb_df2 <- msigdbr(species = "mouse", subcategory = "CGN")
+
+
+
+```
+
