@@ -9,12 +9,12 @@ experiments) performed on embryonic brain tissues (~E15) upon deletion of the tr
 
 - The primary dataset is an output of DESEQ2 the majority of the code intersects
 the primary dataset with multiple databases such as MotifMap (Transcription factor motifs), HT (Human Transcription factors database), 
-SFARI (Autism gene database), and RVIS (Residual Variation Intolerance Score) all available in this package. 
+SFARI (Autism gene database), and RVIS (Residual Variation Intolerance Score) all available in this repository. 
 
 - Raw sequencing data is available at GEO******
 
 
--The code available in this repository is written in R programming language
+-All code is written in R programming language (R - Version 1.4.1106)
 
 #
 
