@@ -1,5 +1,4 @@
-# whole-genome-sequencing-ZBTB18
-
+# Data visualization and statistical analysis of whole-genome sequencing of ZBTB18
 
 
 - Data available in this repository is based on experiments conducted as part of a manuscript 
