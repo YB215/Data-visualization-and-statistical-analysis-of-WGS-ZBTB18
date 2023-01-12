@@ -11,10 +11,6 @@ experiments) performed on embryonic brain tissues upon deletion of the transcrip
 the primary dataset with multiple databases such as MotifMap (Transcription factor motifs), HT (Human Transcription factors database), 
 SFARI (Autism gene database), and RVIS (Residual Variation Intolerance Score) all available in this package. 
 
-- Raw data is available at GEO******
+- Raw sequencing data is available at GEO******
 
-
-
-
-
-# The code available in this repository is written in R programming language
+-The code available in this repository is written in R programming language
