@@ -18,6 +18,6 @@ SFARI (Autism gene database), and RVIS (Residual Variation Intolerance Score) al
 
 #
 
-Yared Bayleyen P.hD. candidate
-Christopher Mason Laboratory
+Yared Bayleyen P.hD. candidate - 
+Christopher Mason Laboratory -
 Weill Cornell Medicine
