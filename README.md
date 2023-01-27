@@ -1,7 +1,7 @@
 # Data visualization and statistical analysis of whole-genome sequencing of ZBTB18
 
 
-- Data available in this repository is based on experiments as part of a PhD thesis: 
+- Data available in this repository is based on experiments as part of a PhD thesis project: 
 'Mapping the genetic landscape of ZBTB18 in the embryonic mouse cortex'
 
 - The code available is for data visualization and statistical analysis of whole-genome sequencing dataset (RNA sequencing 
