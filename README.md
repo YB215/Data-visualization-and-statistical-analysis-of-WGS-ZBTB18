@@ -11,13 +11,11 @@ experiments) performed on embryonic brain tissues (~E15) upon deletion of the tr
 the primary dataset with multiple databases such as MotifMap (Transcription factor motifs), HT (Human Transcription factors database), 
 SFARI (Autism gene database), and RVIS (Residual Variation Intolerance Score) all available in this repository. 
 
-- Raw sequencing data is available at GEO******
-
+- Raw genomic data can be available upon request
 
 -All code is written in R programming language (R - Version 1.4.1106)
 
 #
 
-Yared Bayleyen - P.hD. candidate -
-Christopher Mason Laboratory -
+Yared Bayleyen - Neuroscience P.hD. candidate -
 Weill Cornell Medicine
